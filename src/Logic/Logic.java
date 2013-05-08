@@ -23,8 +23,10 @@ import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
-import java.util.List;
+import java.util.regex.Pattern;
 import javax.swing.JOptionPane;
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.transform.OutputKeys;
 import javax.xml.transform.Source;
 import javax.xml.transform.Transformer;
@@ -34,6 +36,10 @@ import javax.xml.transform.TransformerFactory;
 import javax.xml.transform.stream.StreamResult;
 import javax.xml.transform.stream.StreamSource;
 import org.json.JSONObject;
+import org.w3c.dom.Document;
+import org.w3c.dom.Element;
+import org.w3c.dom.Node;
+import org.w3c.dom.NodeList;
 
 
 /**
@@ -63,42 +69,102 @@ public class Logic{
              */
             result = query(sql);
             
-            if(result != null){                
+            if(result != null){
                 int number_columns = result.getMetaData().getColumnCount();
                 for(int j = 1;j <= number_columns;j++){
                     System.out.println(""+result.getMetaData().getColumnName(j));
                 }
-                                
+
                 /*
                  * Pretty print the JSON result.
                  */
                 fw = new FileWriter("json.json");
-                pw = new PrintWriter(fw);                
+                pw = new PrintWriter(fw);
                 json = prettyJSON(result.getString(2));
                 json = removeClipData(json);
                 pw.println(json);
                 fw.close();
-                fw = null; pw = null;
                              
                 /*
                  * Parse the JSON to XML
                  */
-                JSONObject jo = new JSONObject(json);
-                String new_xml = org.json.XML.toString(jo);
-                fw = new FileWriter("generated.xml");
-                pw = new PrintWriter(fw);
-                pw.println(new_xml);
-                fw.close();
-                fw = null; pw = null;
+                JSONObject jo = new JSONObject(json);                
+                xml = "<xml>" + org.json.XML.toString(jo) + "</xml>"; //Adding a root to the document.
                                 
                 /*
                  * Pretty print the XML result.
                  */                
-                fw = new FileWriter("pretty_generated.xml");
+                fw = new FileWriter("xml.xml");
                 pw = new PrintWriter(fw);
-                xml = prettyXML(readFile("generated.xml"));
+                xml = prettyXML(xml);
                 pw.println(xml);
                 fw.close();
+                
+                /*
+                 * Creating "edit.xml"
+                 */                
+                String events = readFile("events.xml");
+                String mute = "";
+                String skip = "";
+                try{
+                    DocumentBuilderFactory dbFactory = DocumentBuilderFactory.newInstance();
+                    DocumentBuilder dBuilder = dbFactory.newDocumentBuilder();
+                    Document doc = dBuilder.parse(new File("xml.xml"));
+                    double start = 0, end = 0;
+                    String fileName = "";
+                    String text = "";
+                    Element elemento = doc.getDocumentElement();
+                    NodeList trackEvents = elemento.getElementsByTagName("trackEvents");
+                    for(int i=0; i<trackEvents.getLength(); i++){
+                        Node currentNode = trackEvents.item(i);
+                        NodeList nodes = currentNode.getChildNodes();                        
+                        for(int j=0; j<nodes.getLength(); j++){
+                            if(nodes.item(j).getNodeName().equals("popcornOptions")){
+                                Node popcornOptions = nodes.item(j);                                                                                                 
+                                NodeList options = popcornOptions.getChildNodes();
+                                for(int k=0; k<options.getLength(); k++){
+                                    if(options.item(k).getNodeName().equals("start")){
+                                        start = Double.parseDouble(options.item(k).getTextContent());                                        
+                                        System.out.println(start);
+                                    }
+                                    if(options.item(k).getNodeName().equals("end")){
+                                        end = Double.parseDouble(options.item(k).getTextContent());
+                                        System.out.println(end);
+                                    }
+                                    if(options.item(k).getNodeName().equals("title")){
+                                        fileName = options.item(k).getTextContent();
+                                        System.out.println(fileName);
+                                    }
+                                    if(options.item(k).getNodeName().equals("text")){
+                                        text = options.item(k).getTextContent();
+                                        System.out.println(text);
+                                    }
+                                }
+                            }
+                            if(nodes.item(j).getNodeName().equals("type")){                                
+                                if(nodes.item(j).getTextContent().equals("text")){
+                                    if(text.equals("mute")){
+                                        mute = mute + "\n\t\t<mute start=\"" + start + "\" end=\"" + end + "\"></mute>";
+                                    }
+                                }
+                                if(nodes.item(j).getTextContent().equals("skip")){
+                                    skip = skip + "\n\t\t<skip start=\"" + start + "\" end=\"" + end + "\"></skip>";
+                                }
+                            }
+                        }                        
+                    }
+                    mute = "\t<mutes>" + mute + "\n\t\t<name>" + processFileName(fileName) + "</name>" + "\n\t</mutes>";
+                    skip = "\n\t<skips>" + skip + "\n\t</skips>";
+                    events = events.replaceAll(Pattern.quote("</recording>"),mute+skip+"\n</recording>");
+                    fw = new FileWriter("edit.xml");
+                    pw = new PrintWriter(fw);
+                    pw.print(events);
+                }catch (Exception e){
+                    e.printStackTrace();
+                    System.out.println("\n\n\tHouston, we have a problem! :S");
+                }finally{                                        
+                    fw.close();
+                }                             
             }
         }catch(SQLException e){}
         finally{
@@ -184,9 +250,8 @@ public class Logic{
     public static String prettyXML(String xml) throws TransformerConfigurationException, TransformerException{
         Source xmlInput = new StreamSource(new StringReader(xml));
         StreamResult xmlOutput = new StreamResult(new StringWriter());        
-        Transformer transformer = TransformerFactory.newInstance().newTransformer();
-        transformer.setOutputProperty(OutputKeys.DOCTYPE_SYSTEM, "testing.dtd");
-        transformer.setOutputProperty(OutputKeys.INDENT, "yes");        
+        Transformer transformer = TransformerFactory.newInstance().newTransformer();        
+        transformer.setOutputProperty(OutputKeys.INDENT, "yes");
         transformer.setOutputProperty("{http://xml.apache.org/xslt}indent-amount", "3");
         transformer.transform(xmlInput, xmlOutput);
         return xmlOutput.getWriter().toString();
@@ -212,17 +277,33 @@ public class Logic{
      * Description: remove the "clipData" key and its value from de Json,
      *              which causes conflict when parsing to xml.
      */
-    public static String removeClipData(String json){        
+    public static String removeClipData(String json){
         int fst = 0, lst = 0;
         String to_replace = "";
-        if (json.indexOf("clipData") != -1) {                        
-            fst = json.indexOf("clipData");                                                            
-            for(lst=fst; json.charAt(lst) != '}'; lst++){
-                to_replace = to_replace + json.charAt(lst);
+        if (json.indexOf("clipData") != -1){
+            fst = json.indexOf("clipData") - 1;            
+            if((json.charAt(fst + 10) == '{') || (json.charAt(fst + 11) == '{') || (json.charAt(fst + 12) == '{')){
+                for(lst=fst; json.charAt(lst) != '}'; lst++){
+                    to_replace = to_replace + json.charAt(lst);
+                }
+                to_replace = to_replace + json.charAt(lst);                
             }
-            to_replace = to_replace + json.charAt(lst);            
         }
-        String resp = json.replaceAll(to_replace,"");
-        return resp;
+        return json.replaceAll(Pattern.quote(to_replace),"");
+    }
+    
+    /*
+     * Method: processFileName(String file)
+     * Usage: processFileName("The audio file name");
+     * ------------------------------------------
+     * Description: returns the name of the audio file
+     *              without the butter id.
+     */
+    public static String processFileName(String file){
+        String fileName = "";
+        for(int i=0; file.charAt(i)!='?'; i++){
+            fileName = fileName + file.charAt(i);
+        }
+        return fileName;
     }
 }
