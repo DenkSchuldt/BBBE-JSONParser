@@ -2,7 +2,7 @@
  * To change this template, choose Tools | Templates
  * and open the template in the editor.
  */
-package Logic;
+package jsonparser;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
@@ -46,7 +46,7 @@ import org.w3c.dom.NodeList;
  *
  * @author Denny
  */
-public class Logic{
+public class JSONParser{
         
     public static ResultSet result = null;    
     public static Connection connection;
@@ -60,7 +60,7 @@ public class Logic{
     public static void main(String args[]) throws IOException, TransformerConfigurationException, TransformerException{
         
         path = "Z:/butter/popcorn.sqlite";
-        String sql = "select * from Projects where id='4' and email='dschuldt@outlook.com'";
+        String sql = "select * from Projects where id='5' and email='dschuldt@outlook.com'";
         
         try{
             
@@ -89,11 +89,11 @@ public class Logic{
                  * Parse the JSON to XML
                  */
                 JSONObject jo = new JSONObject(json);                
-                xml = "<xml>" + org.json.XML.toString(jo) + "</xml>"; //Adding a root to the document.
+                xml = "<xml>" + org.json.XML.toString(jo) + "</xml>"; //Adding a root to the document. (It could be any tag)
                                 
                 /*
                  * Pretty print the XML result.
-                 */                
+                 */
                 fw = new FileWriter("xml.xml");
                 pw = new PrintWriter(fw);
                 xml = prettyXML(xml);
@@ -102,60 +102,56 @@ public class Logic{
                 
                 /*
                  * Creating "edit.xml"
-                 */                
+                 */
+                double start = 0, end = 0;
                 String events = readFile("events.xml");
-                String mute = "";
-                String skip = "";
+                String mutes = "";
+                String skips = "";                
+                String fileName = "";
+                String text = "";
                 try{
                     DocumentBuilderFactory dbFactory = DocumentBuilderFactory.newInstance();
                     DocumentBuilder dBuilder = dbFactory.newDocumentBuilder();
                     Document doc = dBuilder.parse(new File("xml.xml"));
-                    double start = 0, end = 0;
-                    String fileName = "";
-                    String text = "";
                     Element elemento = doc.getDocumentElement();
                     NodeList trackEvents = elemento.getElementsByTagName("trackEvents");
                     for(int i=0; i<trackEvents.getLength(); i++){
                         Node currentNode = trackEvents.item(i);
-                        NodeList nodes = currentNode.getChildNodes();                        
+                        NodeList nodes = currentNode.getChildNodes();
                         for(int j=0; j<nodes.getLength(); j++){
                             if(nodes.item(j).getNodeName().equals("popcornOptions")){
-                                Node popcornOptions = nodes.item(j);                                                                                                 
+                                Node popcornOptions = nodes.item(j);
                                 NodeList options = popcornOptions.getChildNodes();
                                 for(int k=0; k<options.getLength(); k++){
                                     if(options.item(k).getNodeName().equals("start")){
-                                        start = Double.parseDouble(options.item(k).getTextContent());                                        
-                                        System.out.println(start);
+                                        start = Double.parseDouble(options.item(k).getTextContent());
                                     }
                                     if(options.item(k).getNodeName().equals("end")){
                                         end = Double.parseDouble(options.item(k).getTextContent());
-                                        System.out.println(end);
                                     }
                                     if(options.item(k).getNodeName().equals("title")){
                                         fileName = options.item(k).getTextContent();
-                                        System.out.println(fileName);
                                     }
                                     if(options.item(k).getNodeName().equals("text")){
                                         text = options.item(k).getTextContent();
-                                        System.out.println(text);
                                     }
                                 }
                             }
-                            if(nodes.item(j).getNodeName().equals("type")){                                
+                            if(nodes.item(j).getNodeName().equals("type")){
                                 if(nodes.item(j).getTextContent().equals("text")){
                                     if(text.equals("mute")){
-                                        mute = mute + "\n\t\t<mute start=\"" + start + "\" end=\"" + end + "\"></mute>";
+                                        mutes = mutes + "\n\t\t<mute start=\"" + start + "\" end=\"" + end + "\"></mute>";
                                     }
                                 }
                                 if(nodes.item(j).getTextContent().equals("skip")){
-                                    skip = skip + "\n\t\t<skip start=\"" + start + "\" end=\"" + end + "\"></skip>";
+                                    skips = skips + "\n\t\t<skip start=\"" + start + "\" end=\"" + end + "\"></skip>";
                                 }
                             }
                         }                        
                     }
-                    mute = "\t<mutes>" + mute + "\n\t\t<name>" + processFileName(fileName) + "</name>" + "\n\t</mutes>";
-                    skip = "\n\t<skips>" + skip + "\n\t</skips>";
-                    events = events.replaceAll(Pattern.quote("</recording>"),mute+skip+"\n</recording>");
+                    mutes = "\t<mutes>" + mutes + "\n\t\t<name>" + processFileName(fileName) + "</name>" + "\n\t</mutes>";
+                    skips = "\n\t<skips>" + skips + "\n\t</skips>";
+                    events = events.replaceAll(Pattern.quote("</recording>"),mutes+skips+"\n</recording>");
                     fw = new FileWriter("edit.xml");
                     pw = new PrintWriter(fw);
                     pw.print(events);
@@ -182,7 +178,7 @@ public class Logic{
     }    
     
     /*
-     * Method: query(String sql)
+     * Method: query
      * Usage: query("Your query to the sqlite DB");
      * --------------------------------------------
      * Description: Realizes a query to the sqlite DB, and 
@@ -203,7 +199,7 @@ public class Logic{
     }    
     
     /*
-     * Method: connect()
+     * Method: connect
      * Usage: connect();
      * -----------------
      * Description: Connects to the Sqlite DB.
@@ -224,7 +220,7 @@ public class Logic{
     }
         
     /*
-     * Method: readFile(String path)
+     * Method: readFile
      * Usage: readFile("Path to your file.extension");
      * -----------------------------------------------
      * Description: Returns the content of a file as a String.
@@ -242,7 +238,7 @@ public class Logic{
     }
     
     /*
-     * Method: prettyXML(String xml)
+     * Method: prettyXML
      * Usage: prettyXML("Your ugly xml String here");
      * ------------------------------------------
      * Description: returns a pretty xml String.
@@ -258,7 +254,7 @@ public class Logic{
     }
     
     /*
-     * Method: prettyJSON(String json)
+     * Method: prettyJSON
      * Usage: prettyJSON("Your ugly json String here");
      * ------------------------------------------
      * Description: returns a pretty json String.
@@ -271,7 +267,7 @@ public class Logic{
     }
     
     /*
-     * Method: removeClipData(String json)
+     * Method: removeClipData
      * Usage: removeClipData("Json string");
      * ------------------------------------------
      * Description: remove the "clipData" key and its value from de Json,
@@ -293,7 +289,7 @@ public class Logic{
     }
     
     /*
-     * Method: processFileName(String file)
+     * Method: processFileName
      * Usage: processFileName("The audio file name");
      * ------------------------------------------
      * Description: returns the name of the audio file
