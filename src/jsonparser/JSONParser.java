@@ -9,15 +9,11 @@ import com.google.gson.GsonBuilder;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonParser;
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.StringReader;
 import java.io.StringWriter;
-import java.nio.MappedByteBuffer;
-import java.nio.channels.FileChannel;
-import java.nio.charset.Charset;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
@@ -42,9 +38,22 @@ import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 
 
-/**
- *
- * @author Denny
+/*  
+ *  JSONParser
+ * ------------
+ * Description:
+ *      JSONParser connects to the sqlite DB where Popcorn Maker store the projects, and select a project 
+ *      according to the 'id' and user's 'email' (required query to the DB). Then, saves that result in a 
+ *      file named "json.json", in case you want to check the result. That result is parsed to XML and 
+ *      saved in "xml.xml", for the same purpose.
+ *      This xml is processed to extract the changes made with popcorn, which at this version at "mute" and
+ *      "skip". "mute" is a text event on popcorn, but has mute as content.
+ *      Finally, 'edit.xml' contains the changes to be made on "events.xml"
+ * 
+ * Required libraries:
+ *      -> JSON-java.jar       : https://github.com/douglascrockford/JSON-java
+ *      -> gson-2.2.3.jar      : https://code.google.com/p/google-gson/downloads/detail?name=google-gson-2.2.3-release.zip
+ *      -> sqlitejdbc-v056.jar : https://code.google.com/p/sqlitebot/downloads/detail?name=sqlitejdbc-v056.jar&can=2&q=
  */
 public class JSONParser{
         
@@ -60,7 +69,9 @@ public class JSONParser{
     public static void main(String args[]) throws IOException, TransformerConfigurationException, TransformerException{
         
         path = "Z:/butter/popcorn.sqlite";
-        String sql = "select * from Projects where id='5' and email='dschuldt@outlook.com'";
+        
+        // Replace ID and USER_EMAIL.
+        String sql = "select * from Projects where id='8' and email='dschuldt@outlook.com'";
         
         try{
             
@@ -104,11 +115,11 @@ public class JSONParser{
                  * Creating "edit.xml"
                  */
                 double start = 0, end = 0;
-                String events = readFile("events.xml");
-                String mutes = "";
-                String skips = "";                
-                String fileName = "";
-                String text = "";
+                String mutes = "",
+                       skips = "",
+                       fileName = "",
+                       text = "",
+                       edit = "";
                 try{
                     DocumentBuilderFactory dbFactory = DocumentBuilderFactory.newInstance();
                     DocumentBuilder dBuilder = dbFactory.newDocumentBuilder();
@@ -149,12 +160,12 @@ public class JSONParser{
                             }
                         }                        
                     }
-                    mutes = "\t<mutes>" + mutes + "\n\t\t<name>" + processFileName(fileName) + "</name>" + "\n\t</mutes>";
+                    mutes = "\n\t<mutes>" + mutes + "\n\t\t<name>" + fileName + "</name>" + "\n\t</mutes>";
                     skips = "\n\t<skips>" + skips + "\n\t</skips>";
-                    events = events.replaceAll(Pattern.quote("</recording>"),mutes+skips+"\n</recording>");
+                    edit = "<edit>" + mutes + skips + "\n</edit>";
                     fw = new FileWriter("edit.xml");
                     pw = new PrintWriter(fw);
-                    pw.print(events);
+                    pw.print(edit);
                 }catch (Exception e){
                     e.printStackTrace();
                     System.out.println("\n\n\tHouston, we have a problem! :S");
@@ -218,25 +229,7 @@ public class JSONParser{
             JOptionPane.showMessageDialog(null,"2 -> "  + e.getMessage());
         }
     }
-        
-    /*
-     * Method: readFile
-     * Usage: readFile("Path to your file.extension");
-     * -----------------------------------------------
-     * Description: Returns the content of a file as a String.
-     */
-    private static String readFile(String path) throws IOException {
-        FileInputStream stream = new FileInputStream(new File(path));
-        try {
-            FileChannel fc = stream.getChannel();
-            MappedByteBuffer bb = fc.map(FileChannel.MapMode.READ_ONLY, 0, fc.size());
-            return Charset.defaultCharset().decode(bb).toString();
-        }
-        finally {
-            stream.close();
-        }
-    }
-    
+
     /*
      * Method: prettyXML
      * Usage: prettyXML("Your ugly xml String here");
@@ -271,7 +264,8 @@ public class JSONParser{
      * Usage: removeClipData("Json string");
      * ------------------------------------------
      * Description: remove the "clipData" key and its value from de Json,
-     *              which causes conflict when parsing to xml.
+     *              which causes conflict when parsing to xml at the <audio>
+     *              tag, which does not exits.
      */
     public static String removeClipData(String json){
         int fst = 0, lst = 0;
@@ -286,20 +280,5 @@ public class JSONParser{
             }
         }
         return json.replaceAll(Pattern.quote(to_replace),"");
-    }
-    
-    /*
-     * Method: processFileName
-     * Usage: processFileName("The audio file name");
-     * ------------------------------------------
-     * Description: returns the name of the audio file
-     *              without the butter id.
-     */
-    public static String processFileName(String file){
-        String fileName = "";
-        for(int i=0; file.charAt(i)!='?'; i++){
-            fileName = fileName + file.charAt(i);
-        }
-        return fileName;
-    }
+    }    
 }
